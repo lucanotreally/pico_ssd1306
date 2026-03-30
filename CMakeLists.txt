@@ -1,5 +1,5 @@
-cmake_minimum_required(VERSION 3.6)
-set(PICO_PLATFORM rp2350-arm-s)
+cmake_minimum_required(VERSION 3.13)
+set(PICO_BOARD pico2)
 include(pico_sdk_import.cmake)
 
 project(ssd1306 C CXX ASM)
@@ -12,8 +12,10 @@ set(PICO_EXAMPLES_PATH ${PROJECT_SOURCE_DIR})
 pico_sdk_init()
 
 #nome del file eseguibile generato
-add_executable(ssd1306) 
-
+add_executable(ssd1306
+	main.c
+	pico_ssd1306.c
+)
 #dichiaro che c'è un programma PIO, chiamato new_scan.pio, che voglio
 #buildare come HEADER per il mio file c, per essere buildato
 #nell'eseguibile scan_pio(come detto prima)

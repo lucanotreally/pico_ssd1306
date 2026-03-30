@@ -12,13 +12,14 @@
 typedef enum {
 
 	SET_DISP_OFF = 0xAE, //0xAE turns display off, low pwr sleep mode, 0xAF turns display on
-	SET_DISP_ON = 0xAF
+	SET_DISP_ON = 0xAF,
 	SET_CONTRAST = 0x81,//set contrast 0-255 -> 0x00-0xFF
-	SET_NORM_INV = 0xA6,//normal mode, 0xA7 inverts bits(1=off, 0=on)
+	SET_INVERSION_NORMAL= 0xA6,//normal mode, 0xA7 inverts bits(1=off, 0=on)
+	SET_INVERSION_INVERTED = 0xA7,
 	SET_DISPLAY_NORMAL= 0xA4,//show what is in ram
 	SET_ENTIRE_ON = 0xA5, //ignore ram, all pixels white
 
-	SET_MEM_ADDR = 0x20,//sending 0x00 makes horizontal(normal) mode 0x01 = vertical 0x02 = page, watch documentation
+	SET_MEM_ADDR = 0x20,//sending 0x00 makes horizontal(normal) mode 0x01 = vertical 0x02 = page, read documentation
 	SET_COL_ADDR = 0x21,//only used for vertical and page mode
 	SET_PAGE_ADDR = 0x22,//same
 
@@ -43,8 +44,11 @@ typedef struct {
     uint8_t address; 	//i2c address of display, 0x3C or 0x3D,based on solder bridge on the back of the display
     i2c_inst_t *i2c_i; 	//i2c connection instance, pico stuff
     bool external_vcc; 	// whether display uses external vcc 
-    uint8_t display_buffer[1025];	// display buffer
+    uint8_t full_buffer[1025];	// whole buffer including 0x40 at the start
+    uint8_t *display_buffer;	// display buffer that points to full_buffer[1], done so i can send only 1 array when uploading screen each time, reducing serial comm load
 } ssd1306_t;
+
+bool ssd1306_init(ssd1306_t *p,uint8_t width, uint8_t height, uint8_t address, i2c_inst_t *instance);
 
 //*display is divided in pages, blocks 8 pixel tall,128 wide
 #endif
