@@ -1,52 +1,84 @@
-#include 
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#include"pico_ssd1306.h"
+
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
-#include "hardware/i2c.h"
 #include "pico/binary_info.h"
 
-#define OLED_ADDR 0x3C
-#define OLED_BUF_SIZE 1024 //120*64 = 8192 bit o pixel, 8192/8 = 1024 byte di frame buffer
-
-int waitime = 2;
 //ssd1306 riconosce se byte mandato è di comando o un dato mandando due byte, primo di risconoscimento secondo di contenuto 0x00  = prossimo byte è comando, 0x40 = prossimo byte è dato
-void oled_send_cmd(uint8_t cmd){
-	uint8_t buf[2]; //array di due byte da mandare
-	buf[0] = 0x00;//imposto zero in quanto questa funzione manda solo comandi
-	buf[1] = cmd; //comando come argomento funzione
-	i2c_write_blocking(i2c0, OLED_ADDR, buf, 2 ,false);
 
+
+
+inline static void raw_write(i2c_inst_t *i2c, uint8_t addr, const uint8_t *data, size_t len, char *name) {
+    switch(i2c_write_blocking(i2c, addr, data, len, false)) {
+    case PICO_ERROR_GENERIC:
+        printf("[%s] addr not acknowledged!\n", name);
+        break;
+    case PICO_ERROR_TIMEOUT:
+        printf("[%s] timeout!\n", name);
+        break;
+    default:
+        //printf("[%s] wrote successfully %lu bytes!\n", name, len);
+        break;
+    }
 }
 
-void oled_init() {
-    uint8_t init_cmds[] = {
-        0xAE,       // Display OFF
-        0xD5, 0x80, // Imposta il clock
-        0xA8, 0x3F, // Multiplex ratio (per 64 righe)
-        0xD3, 0x00, // Display offset a 0
-        0x40,       // Start line a 0
-        0x8D, 0x14, // ATTIVA LA CHARGE PUMP (Alta tensione per i LED)
-        0x20, 0x00, // Memory addressing mode: Horizontal
-        0xA1,       // Capovolgi orizzontalmente
-        0xC8,       // Capovolgi verticalmente
-        0xDA, 0x12, // Configurazione pin COM
-        0x81, 0xCF, // Contrasto (0-255)
-        0xD9, 0xF1, // Pre-charge period
-        0xDB, 0x40, // VCOMH deselect level
-        0xA4,       // Segui la RAM
-        
-        // LA MODIFICA È QUI: 0xA7 invece di 0xA6
-        0xA6,       // Invert Display (0=Bianco, 1=Nero)
-        
-        0xAF        // DISPLAY ON!
-    };
+inline static void ssd1306_send_cmd(ssd1306_t *p, uint8_t val){
+	uint8_t cmd_string[2] = {0x00,val};
+	raw_write(p->i2c_i,p->address,cmd_string,2,"ssd1306_send_cmd");
+}
 
-    int num_cmds = sizeof(init_cmds) / sizeof(init_cmds[0]);
-    for (int i = 0; i < num_cmds; i++) {
-        oled_send_cmd(init_cmds[i]);
-    }
+void ssd1306_init(ssd1306_t *p,uint8_t width,uint8_t height,uint8_t address, i2c_inst_t *i2c_istance){
+	p->width=width;
+	p->height=height;
+    	p->pages=height/8;
+	p->address=address;
+	p->i2c_i=i2c_instance;
+	
+	uint8_t init_cmds[] = {
+		//some commands are 1 byte and some are 2 bytes long, requiring a value, they are arranged so the single byte ones are alone on the row, otherwise the data is specified next to them
+		//all param and value explanations in the header
+		SET_DISP_OFF,
+		SET_DISP_CLK_DIV, 0x80,
+		SET_MUX_RATIO, height-1,
+		SET_DISP_OFFSET, 0x00,
+		SET_DISP_START_LINE,
+		SET_CHARGE_PUMP,p->external_vcc?0x10:0x14,
+		SET_SEG_REMAP,
+		SET_COM_OUT_DIR, width>2*height?0x02:0x12,
+		SET_CONTRAST, 0xFF,
+		SET_PRECHARGE, p->external_vcc?0x22:0xF1,
+		SET_VCOM_DESEL 0x30,
+		SET_DISPLAY_NORMAL,
+		SET_NORM_INV,
+		SET_DISP_ON,
+		SET_MEM_ADDR, 0x00
+	}
+	for(size_t i=0;i<sizeof(init_cmds);i++){
+		ssd1306_send_cmd(p,init_cmds[i]);
+	}
+
+	return true
+}
+
+/* sus name and usage
+inline void ssd1306_deinit(ssd1306_t *p){
+	ssd1306_send_cmd(p,SET_DISP_OFF);
+	p->width = 0;
+	p->height = 0;
+	p->address = 0;
+	p->pages = 0; 
+}*/
+
+inline void ssd1306_poweroff(ssd1306_t *p){
+	ssd1306_send_cmd(p,SET_DISP_OFF);
+}
+
+inline void ssd1306_poweroff(ssd1306_t *p){
+	ssd1306_send_cmd(p,SET_DISP_ON);
 }
 
 void oled_update(uint8_t *buffer){
