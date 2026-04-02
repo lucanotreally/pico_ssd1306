@@ -167,34 +167,27 @@ inline static void swap(int32_t *a, int32_t *b) {
     *b=*t;
 }
 void ssd1306_draw_line(ssd1306_t *p, uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2) {
-    // 1. Calcoliamo le distanze assolute
     int dx = abs(x2 - x1);
     int dy = -abs(y2 - y1);
     
-    // 2. Determiniamo la direzione del passo (1 o -1)
     int sx = (x1 < x2) ? 1 : -1;
     int sy = (y1 < y2) ? 1 : -1;
     
-    // 3. Variabile di decisione (errore)
     int err = dx + dy;
     int e2; 
 
     while (1) {
-        // Disegniamo il pixel corrente
         ssd1306_draw_pixel(p, x1, y1);
 
-        // Se siamo arrivati a destinazione, usciamo dal ciclo
         if (x1 == x2 && y1 == y2) break;
 
         e2 = 2 * err;
 
-        // Decidiamo se muoverci lungo X
         if (e2 >= dy) {
             err += dy;
             x1 += sx;
         }
 
-        // Decidiamo se muoverci lungo Y
         if (e2 <= dx) {
             err += dx;
             y1 += sy;
