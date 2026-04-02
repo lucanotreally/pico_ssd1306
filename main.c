@@ -36,16 +36,43 @@ int main(){
 	
 	
 	printf("creato display e assegnata istanza\ninizializzo schermo...\n");
-	ssd1306_init(&disp1,128,64,OLED_ADDR,i2c0,0,1);
+	ssd1306_init(&disp1,128,64,OLED_ADDR,i2c0,0,0);
 	sleep_ms(1000);
 	ssd1306_set_inversion_inverted(&disp1);
 	sleep_ms(3000);
 	ssd1306_set_inversion_normal(&disp1);
 	printf("provo scroll");
 	sleep_ms(2000);
-	ssd1306_horizontal_scroll_init(&disp1,1,16,55,8);
+	ssd1306_horizontal_scroll_init(&disp1,1,0,63,8);
 	ssd1306_scroll_start(&disp1);
 	sleep_ms(3000);
+	ssd1306_scroll_stop(&disp1);
+	sleep_ms(100);
+	printf("cancello pixel centrali");
+	for (uint8_t i = 0;i<64;i++){
+		ssd1306_clear_pixel(&disp1,63,i);
+	}
+	for (uint8_t i = 0;i<64;i++){
+		ssd1306_clear_pixel(&disp1,32,i);
+	}
+	for (uint8_t i = 0;i<64;i++){
+		ssd1306_clear_pixel(&disp1,96,i);
+	}
+	ssd1306_update_display(&disp1);
+	sleep_ms(2000);
+	//ssd1306_scroll_start(&disp1);
+	ssd1306_clear_display(&disp1);
+	ssd1306_update_display(&disp1);
+	sleep_ms(1000);
+	ssd1306_fill_display(&disp1);
+	ssd1306_update_display(&disp1);
+	sleep_ms(1000);
+
+	ssd1306_clear_display(&disp1);
+	ssd1306_draw_pixel(&disp1,0,0);
+	ssd1306_draw_line(&disp1, 32,17,96,47);
+	ssd1306_update_display(&disp1);
+	ssd1306_scroll_start(&disp1);
 	while(1){
 		gpio_put(25,0);
 		sleep_ms(1000);

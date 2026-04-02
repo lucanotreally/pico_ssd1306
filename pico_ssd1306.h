@@ -63,5 +63,13 @@ void ssd1306_stop_scroll(ssd1306_t *p);
 void ssd1306_horizontal_scroll_init(ssd1306_t *p, bool right, uint8_t start_line, uint8_t end_line, uint8_t speed);
 void ssd1306_scroll_start(ssd1306_t *p);
 void ssd1306_scroll_stop(ssd1306_t *p);
+void ssd1306_update_display(ssd1306_t *p);
+void ssd1306_clear_pixel(ssd1306_t *p, uint8_t x, uint8_t y);
+
+void ssd1306_draw_pixel(ssd1306_t *p, uint8_t x, uint8_t y);
+void ssd1306_clear_display(ssd1306_t *p);
+void ssd1306_fill_display(ssd1306_t *p);
+
+void ssd1306_draw_line(ssd1306_t *p, uint8_t x1, uint8_t y1,uint8_t x2,uint8_t y2);
 //*display is divided in pages, blocks 8 pixel tall,128 wide
 #endif

@@ -133,3 +133,71 @@ void ssd1306_scroll_stop(ssd1306_t *p){
 	ssd1306_send_cmd(p,SET_SCROLL_OFF);
 	p->is_scrolling = false;
 }
+
+void ssd1306_clear_pixel(ssd1306_t *p, uint8_t x, uint8_t y){
+	if (x>=p->width || y>=p->height) return;
+	uint16_t index = ((y>>3)*p->width) + x;
+	p->display_buffer[index] &= ~(1<<(y&7));
+}
+
+void ssd1306_draw_pixel(ssd1306_t *p, uint8_t x, uint8_t y){
+	if (x>=p->width || y>=p->height) return;
+	uint16_t index = ((y>>3)*p->width) + x;
+	p->display_buffer[index] |= (1<<(y&7));
+}
+
+void ssd1306_update_display(ssd1306_t *p){
+	
+	if (p->is_scrolling) ssd1306_scroll_stop(p);
+	raw_write(p->i2c_i,p->address,p->full_buffer,1025,"ssd1306_update");
+	if (p->is_scrolling) ssd1306_scroll_start(p);
+}
+
+void ssd1306_clear_display(ssd1306_t *p){
+	memset(p->display_buffer, 0, 1024);
+}
+
+void ssd1306_fill_display(ssd1306_t *p){
+	memset(p->display_buffer, 0xFF, 1024);
+}
+
+inline static void swap(int32_t *a, int32_t *b) {
+    int32_t *t=a;
+    *a=*b;
+    *b=*t;
+}
+void ssd1306_draw_line(ssd1306_t *p, uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2) {
+    // 1. Calcoliamo le distanze assolute
+    int dx = abs(x2 - x1);
+    int dy = -abs(y2 - y1);
+    
+    // 2. Determiniamo la direzione del passo (1 o -1)
+    int sx = (x1 < x2) ? 1 : -1;
+    int sy = (y1 < y2) ? 1 : -1;
+    
+    // 3. Variabile di decisione (errore)
+    int err = dx + dy;
+    int e2; 
+
+    while (1) {
+        // Disegniamo il pixel corrente
+        ssd1306_draw_pixel(p, x1, y1);
+
+        // Se siamo arrivati a destinazione, usciamo dal ciclo
+        if (x1 == x2 && y1 == y2) break;
+
+        e2 = 2 * err;
+
+        // Decidiamo se muoverci lungo X
+        if (e2 >= dy) {
+            err += dy;
+            x1 += sx;
+        }
+
+        // Decidiamo se muoverci lungo Y
+        if (e2 <= dx) {
+            err += dx;
+            y1 += sy;
+        }
+    }
+}
