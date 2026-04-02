@@ -36,7 +36,16 @@ int main(){
 	
 	
 	printf("creato display e assegnata istanza\ninizializzo schermo...\n");
-	ssd1306_init(&disp1,128,64,OLED_ADDR,i2c0);
+	ssd1306_init(&disp1,128,64,OLED_ADDR,i2c0,0,1);
+	sleep_ms(1000);
+	ssd1306_set_inversion_inverted(&disp1);
+	sleep_ms(3000);
+	ssd1306_set_inversion_normal(&disp1);
+	printf("provo scroll");
+	sleep_ms(2000);
+	ssd1306_horizontal_scroll_init(&disp1,1,16,55,8);
+	ssd1306_scroll_start(&disp1);
+	sleep_ms(3000);
 	while(1){
 		gpio_put(25,0);
 		sleep_ms(1000);

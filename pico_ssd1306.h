@@ -23,8 +23,10 @@ typedef enum {
 	SET_COL_ADDR = 0x21,//only used for vertical and page mode
 	SET_PAGE_ADDR = 0x22,//same
 
-	SET_SEG_REMAP = 0xA0, //x axis orientation, 0xA0=normal 0xA1=flipped x axis
-	SET_COM_OUT_DIR = 0xC0,//y axis orientation, 0xC0=normal 0xC1=flipped y axis
+	FLIP_X_AXIS_OFF = 0xA0,
+	FLIP_X_AXIS_ON = 0xA1,
+	FLIP_Y_AXIS_OFF = 0xC0,
+	FLIP_Y_AXIS_ON = 0xC8,
 	SET_MUX_RATIO = 0xA8,//#of vertical pixels, ssd1306 comes in 64 or 32, for 64 we send 0x3F(63) and 0x1F(31)
 	SET_DISP_START_LINE = 0x40,//hardware way of schangin y offest of screen
 	SET_DISP_OFFSET = 0xD3,//moves screen down to calibrate
@@ -33,7 +35,9 @@ typedef enum {
 	SET_CHARGE_PUMP = 0x8D,//needed to drive leds
 	SET_DISP_CLK_DIV = 0xD5,//display frequency, 0xF0 is max 0x80 typical
 	SET_PRECHARGE = 0xD9,//sharpness of pixels,0xF1 is good
-	SET_VCOM_DESEL = 0xDB//sets vref for off pixels, 0x30 typical
+	SET_VCOM_DESEL = 0xDB,//sets vref for off pixels, 0x30 typical
+	SET_SCROLL_OFF = 0x2E,
+	SET_SCROLL_ON = 0x2F
 } ssd1306_command_t ;
 
 
@@ -46,9 +50,18 @@ typedef struct {
     bool external_vcc; 	// whether display uses external vcc 
     uint8_t full_buffer[1025];	// whole buffer including 0x40 at the start
     uint8_t *display_buffer;	// display buffer that points to full_buffer[1], done so i can send only 1 array when uploading screen each time, reducing serial comm load
+	uint8_t is_scrolling : 1; //keeps track if the display is scrolling, bc writing on the display ram while it is may cause glitching
 } ssd1306_t;
 
-bool ssd1306_init(ssd1306_t *p,uint8_t width, uint8_t height, uint8_t address, i2c_inst_t *instance);
+bool ssd1306_init(ssd1306_t *p,uint8_t width, uint8_t height, uint8_t address, i2c_inst_t *instance,bool x_flip,bool y_flip);
+void ssd1306_set_inversion_normal(ssd1306_t *p);
+void ssd1306_set_inversion_inverted(ssd1306_t *p);
 
+void scroll_trial(ssd1306_t *p);
+void ssd1306_stop_scroll(ssd1306_t *p);
+
+void ssd1306_horizontal_scroll_init(ssd1306_t *p, bool right, uint8_t start_line, uint8_t end_line, uint8_t speed);
+void ssd1306_scroll_start(ssd1306_t *p);
+void ssd1306_scroll_stop(ssd1306_t *p);
 //*display is divided in pages, blocks 8 pixel tall,128 wide
 #endif
