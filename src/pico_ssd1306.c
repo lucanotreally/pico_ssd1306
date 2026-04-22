@@ -199,7 +199,6 @@ void ssd1306_draw_sprite_fast(ssd1306_t *p, const sprite_t *s, int x, int y){
 	for (int sy = (y_start / 8); sy <= (y_end - 1) / 8; sy++) {
 		//adds the current sprite page to first page
 		int target_page = first_page + sy;
-		:
 		if (target_page < 0 || target_page >= 8) continue;
 		//now we loop through the bytes whitin the page
 		for (int sx = x_start; sx < x_end; sx++) {

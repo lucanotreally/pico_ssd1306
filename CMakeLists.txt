@@ -13,19 +13,25 @@ pico_sdk_init()
 
 #nome del file eseguibile generato
 add_executable(ssd1306
-	main.c
-	pico_ssd1306.c
-	sprites.c
+	examples/main.c
+	src/pico_ssd1306.c
+	src/sprites/sprites.c
+)
+
+target_include_directories(ssd1306 PRIVATE
+    src
+    src/sprites
+    src/fonts
 )
 #dichiaro che c'è un programma PIO, chiamato new_scan.pio, che voglio
 #buildare come HEADER per il mio file c, per essere buildato
 #nell'eseguibile scan_pio(come detto prima)
-pico_generate_pio_header(ssd1306 ${CMAKE_CURRENT_LIST_DIR}/ssd1306.pio)
+pico_generate_pio_header(ssd1306 ${CMAKE_CURRENT_LIST_DIR}/src/ssd1306.pio)
 
 
 #listo i file source per il programma scan_pio
 
-target_sources(ssd1306 PRIVATE main.c)
+target_sources(ssd1306 PRIVATE examples/main.c)
 
 #includo le librerie dei vari API per poter usare le funzioni specifiche 
 #nel programma C
@@ -38,6 +44,7 @@ target_link_libraries(ssd1306 PRIVATE
 	hardware_i2c	
 	hardware_dma
 	)
+
 pico_enable_stdio_usb(ssd1306 1)
 pico_enable_stdio_uart(ssd1306 0)
 #il compilatore returna solo un eseguibile, gli dico di farmi anche un .uf2
