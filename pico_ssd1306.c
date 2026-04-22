@@ -109,11 +109,8 @@ void ssd1306_fill_display(ssd1306_t *p){
 	memset(p->display_buffer, 0xFF, (p->width*p->height)/8);
 }
 
-void ssd1306_horizontal_scroll_init(ssd1306_t *p, bool right, uint8_t start_line, uint8_t end_line, uint8_t speed){
+void ssd1306_horizontal_scroll_init(ssd1306_t *p, bool right, uint8_t start_page, uint8_t end_page, uint8_t speed){
 	
-	//display sees "pages", thought thinking in lines would be more natural
-	uint8_t start_page = start_line / 8;
-	uint8_t end_page   = (end_line > 0) ? (end_line - 1) / 8 : 0;
 	//scroll speed bytes make little sense so i put them in a list so we can get a raising speed with range 1-8
 	if (speed<1) speed = 1;
 	if (speed>8) speed = 8;
@@ -178,33 +175,46 @@ void ssd1306_draw_sprite_slow(ssd1306_t *p, const sprite_t *s, int x, int y) {
 }
 
 void ssd1306_draw_sprite_fast(ssd1306_t *p, const sprite_t *s, int x, int y){
-	//checks for over
+	//checks if whole sprite is out of bounds, if so just ignore it
 	if(x>=p->width||y>=p->height||x+(s->width)<=0||y+(s->height)<=0) return;
-	//now we "cut" the s to write in the buffer only the visible part of it
+	//now we "cut" the sprite to write in the buffer only the visible part of it
 	int x_start = (x < 0) ? -x : 0;
 	int x_end = ((x+s->width)>=p->width) ? (p->width)-x : s->width;
 	int y_start = (y < 0) ? -y : 0;
 	int y_end = ((y+s->height)>=p->height) ? (p->height)-y : s->height;
-	//
+	//tells us how many lines are empty(at the top) within a page
+	//ex @y = 3, we are at PAGE0, but first 3 lines are empty
 	int shift = y % 8;
+	//correction block, bc C gives back a negative remainder for a negative input coordinate
 	if (shift < 0) shift += 8;
-	//
+	//finds the first page into which the sprite will be drawn
 	int first_page = y/8;
+	//correction for negative again, decrements first_page if its <0 but > -8 so that it is not drawn on page 0
+	//cause of that y/8, ex: @y=-5, -5/8 = 0, so the sprite would start in p0 even if it is obviously not
+	//the case
 	if (y < 0 && (y % 8 != 0)) first_page--;
+
+	//this for goes through the SPRITE pages(1B tall), good bc y_start is cut beforehand so 
+	//this does not loop over sprite region which are out of visible screen
 	for (int sy = (y_start / 8); sy <= (y_end - 1) / 8; sy++) {
-
+		//adds the current sprite page to first page
 		int target_page = first_page + sy;
-
+		:
 		if (target_page < 0 || target_page >= 8) continue;
-
+		//now we loop through the bytes whitin the page
 		for (int sx = x_start; sx < x_end; sx++) {
+			//copies the byte at the cur poition
 			uint8_t sprite_byte = s->data[sy * s->width + sx];
-
+			//adds sd (curr byte within page) to x (pos coordinate)
+			//so we know the final coordinate on the screen
 			int target_x = x + sx;
+			//index to place ^ coordinate converted with the page logic (same as draw pixel basically)
 			int idx = (target_page * 128) + target_x;
-
+			//we sum (|=) the byte in, but we shift (up) bc we have to account for blank lines
+			//without <<shift everything would be glued at the top of the page
 			p->display_buffer[idx] |= (sprite_byte << shift);
-
+			//this takes care of the remaining bit in the next page
+			//>>(8-shift) makes sure we leave blank lines (pixels per byte) at the bottom 
 			if (shift > 0 && (target_page + 1) < 8) {
 				p->display_buffer[idx + 128] |= (sprite_byte >> (8 - shift));
 			}
@@ -213,11 +223,6 @@ void ssd1306_draw_sprite_fast(ssd1306_t *p, const sprite_t *s, int x, int y){
 
 }
 
-inline static void swap(int32_t *a, int32_t *b) {
-    int32_t *t=a;
-    *a=*b;
-    *b=*t;
-}
 void ssd1306_draw_line(ssd1306_t *p, int x1, int y1,int x2, int y2) {
     int dx = abs(x2 - x1);
     int dy = -abs(y2 - y1);
