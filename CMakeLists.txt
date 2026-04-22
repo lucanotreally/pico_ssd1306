@@ -15,6 +15,7 @@ pico_sdk_init()
 add_executable(ssd1306
 	main.c
 	pico_ssd1306.c
+	sprites.c
 )
 #dichiaro che c'è un programma PIO, chiamato new_scan.pio, che voglio
 #buildare come HEADER per il mio file c, per essere buildato
@@ -35,6 +36,7 @@ target_link_libraries(ssd1306 PRIVATE
 	hardware_adc
 	hardware_pwm
 	hardware_i2c	
+	hardware_dma
 	)
 pico_enable_stdio_usb(ssd1306 1)
 pico_enable_stdio_uart(ssd1306 0)

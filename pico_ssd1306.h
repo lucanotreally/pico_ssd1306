@@ -41,17 +41,30 @@ typedef enum {
 } ssd1306_command_t ;
 
 
+
 typedef struct {
-    uint8_t width; 		
-    uint8_t height; 	
-    uint8_t pages;		//stores pages of display (calculated on initialization)*
-    uint8_t address; 	//i2c address of display, 0x3C or 0x3D,based on solder bridge on the back of the display
-    i2c_inst_t *i2c_i; 	//i2c connection instance, pico stuff
-    bool external_vcc; 	// whether display uses external vcc 
-    uint8_t full_buffer[1025];	// whole buffer including 0x40 at the start
-    uint8_t *display_buffer;	// display buffer that points to full_buffer[1], done so i can send only 1 array when uploading screen each time, reducing serial comm load
-	uint8_t is_scrolling : 1; //keeps track if the display is scrolling, bc writing on the display ram while it is may cause glitching
+	uint8_t width;	
+	uint8_t height; 	
+	uint8_t pages;		//stores pages of display (calculated on initialization)*
+	uint8_t address; 	//i2c address of display, 0x3C or 0x3D,based on solder bridge on the back of the display
+	i2c_inst_t *i2c_i; 	//i2c connection instance, pico stuff
+	bool external_vcc; 	// whether display uses external vcc 
+	int dma_chan;
+	uint8_t active_buffer;
+	uint8_t full_buffer[2][1025];	// whole buffer including 0x40 at the start
+	uint8_t *display_buffer;	// display buffer that points to full_buffer[1], done so i can send only 1 array when uploading screen each time, reducing serial comm load
+	uint8_t is_scrolling; //keeps track if the display is scrolling, bc writing on the display ram while it is may cause glitching
 } ssd1306_t;
+
+typedef struct{
+	uint8_t width;
+	uint8_t height;
+	const uint8_t *data;
+
+} sprite_t;
+
+
+
 
 bool ssd1306_init(ssd1306_t *p,uint8_t width, uint8_t height, uint8_t address, i2c_inst_t *instance,bool x_flip,bool y_flip);
 void ssd1306_set_inversion_normal(ssd1306_t *p);
@@ -64,12 +77,18 @@ void ssd1306_horizontal_scroll_init(ssd1306_t *p, bool right, uint8_t start_line
 void ssd1306_scroll_start(ssd1306_t *p);
 void ssd1306_scroll_stop(ssd1306_t *p);
 void ssd1306_update_display(ssd1306_t *p);
-void ssd1306_clear_pixel(ssd1306_t *p, uint8_t x, uint8_t y);
+void ssd1306_clear_pixel(ssd1306_t *p, int x, int y);
 
-void ssd1306_draw_pixel(ssd1306_t *p, uint8_t x, uint8_t y);
+void ssd1306_draw_pixel(ssd1306_t *p, int x, int y);
 void ssd1306_clear_display(ssd1306_t *p);
 void ssd1306_fill_display(ssd1306_t *p);
 
-void ssd1306_draw_line(ssd1306_t *p, uint8_t x1, uint8_t y1,uint8_t x2,uint8_t y2);
+bool ssd1306_dma_init(ssd1306_t *p);
+void ssd1306_draw_line(ssd1306_t *p, int x1, int y1,int x2,int y2);
+
+void ssd1306_update_display_dma(ssd1306_t *p);
+
+void ssd1306_draw_sprite_slow(ssd1306_t *p, const sprite_t *s, int x, int y);
+void ssd1306_draw_sprite_fast(ssd1306_t *p, const sprite_t *s, int x, int y);
 //*display is divided in pages, blocks 8 pixel tall,128 wide
 #endif
