@@ -287,7 +287,7 @@ void ssd1306_update_display_dma(ssd1306_t *p){
 		ssd1306_update_display(p);
 		return;
 	}
-	while(dma_channel_is_busy(p->dma_chan)){
+	while(dma_channel_is_busy(p->dma_chan) || i2c_get_hw(p->i2c_i)->status & I2C_IC_STATUS_MST_ACTIVITY_BITS){
 		tight_loop_contents();
 	}
 	static uint16_t payload_buffer[1025];
@@ -295,7 +295,8 @@ void ssd1306_update_display_dma(ssd1306_t *p){
 	for(int i = 0; i < 1024; i++){
 		payload_buffer[i + 1] = (uint16_t)p->display_buffer[i];
 	}
-	payload_buffer[1024] = (payload_buffer[1024] & 0x00FF) | (1 << 9);
+	payload_buffer[1024] |= (1 << 9);
+	//payload_buffer[1024] = (payload_buffer[1024] & 0x00FF) | (1 << 9);
 	p->active_buffer = !p->active_buffer;
 	p->display_buffer = &p->full_buffer[p->active_buffer][1];
 	//here i tell dma where to send the data, does this every update bc i2c bus could be busy and i the tar(get) could be changed by other functions
