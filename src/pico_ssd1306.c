@@ -5,7 +5,6 @@
 #include"pico_ssd1306.h"
 
 #include "pico/stdlib.h"
-#include "hardware/pio.h"
 #include "pico/binary_info.h"
 #include "hardware/dma.h"
 //ssd1306 riconosce se byte mandato è di comando o un dato mandando due byte, primo di risconoscimento secondo di contenuto 0x00  = prossimo byte è comando, 0x40 = prossimo byte è dato
