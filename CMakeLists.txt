@@ -18,6 +18,11 @@ add_executable(ssd1306
 	src/sprites/sprites.c
 )
 
+target_compile_definitions(ssd1306
+	PRIVATE
+	SSD1306_USE_DMA=1
+)
+
 target_include_directories(ssd1306 PRIVATE
     src
     src/sprites
@@ -43,6 +48,7 @@ target_link_libraries(ssd1306 PRIVATE
 	hardware_pwm
 	hardware_i2c	
 	hardware_dma
+	hardware_sync
 	)
 
 pico_enable_stdio_usb(ssd1306 1)

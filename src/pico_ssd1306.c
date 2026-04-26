@@ -37,7 +37,7 @@ bool ssd1306_init(ssd1306_t *p,uint8_t width,uint8_t height,uint8_t address, i2c
 	p->i2c_i=i2c_instance;
 	p->active_buffer = 0;
 	p->full_buffer[0][0] = 0x40; //sets comm byte of final payload
-	p->full_buffer[1][0] = 0x40; //same
+	p->full_buffer[1][0] = 0x40; 
 	p->display_buffer = &p->full_buffer[p->active_buffer][1];
 	
 
@@ -102,11 +102,11 @@ void ssd1306_set_inversion_inverted(ssd1306_t *p){
 }
 
 void ssd1306_clear_display(ssd1306_t *p){
-	memset(p->display_buffer, 0, (p->width*p->height)/8);
+	memset(p->display_buffer, 0, (p->width*p->height)/8 * sizeof(p->display_buffer[0]));
 }
 
 void ssd1306_fill_display(ssd1306_t *p){
-	memset(p->display_buffer, 0xFF, (p->width*p->height)/8);
+	memset(p->display_buffer, 0xFF, (p->width*p->height)/8 * sizeof(p->display_buffer[0]));
 }
 
 void ssd1306_horizontal_scroll_init(ssd1306_t *p, bool right, uint8_t start_page, uint8_t end_page, uint8_t speed){
@@ -150,13 +150,24 @@ void ssd1306_draw_pixel(ssd1306_t *p, int x, int y){
 	uint16_t index = ((y>>3)*p->width) + x;
 	p->display_buffer[index] |= (1<<(y&7));
 }
-
+/*
 void ssd1306_update_display(ssd1306_t *p){
 	
 	if (p->is_scrolling) ssd1306_scroll_stop(p);
 	raw_write(p->i2c_i,p->address,p->full_buffer[p->active_buffer],1025,"ssd1306_update");
 	if (p->is_scrolling) ssd1306_scroll_start(p);
 }
+*/
+void ssd1306_update_display(ssd1306_t *p) {
+    if (p->is_scrolling) ssd1306_scroll_stop(p);
+
+        raw_write(p->i2c_i, p->address, p->full_buffer[p->active_buffer], 1025, "ssd1306_update");
+
+    if (p->is_scrolling) ssd1306_scroll_start(p);
+}
+
+
+
 
 void ssd1306_draw_sprite_slow(ssd1306_t *p, const sprite_t *s, int x, int y) {
     for (int iy = 0; iy < s->height; iy++) {
@@ -253,9 +264,11 @@ void ssd1306_draw_line(ssd1306_t *p, int x1, int y1,int x2, int y2) {
 
 bool ssd1306_dma_init(ssd1306_t *p){
 	p->dma_chan = dma_claim_unused_channel(false);
-	if (p->dma_chan < 0) return false; //pico couldnt find free dma channel
+	//if claim function returns -1 it means no dma chan available
+	if (p->dma_chan < 0) return false;
 	dma_channel_config c = dma_channel_get_default_config(p->dma_chan);
-	channel_config_set_transfer_data_size(&c, DMA_SIZE_8);	//send 1 byte at a time
+	//we have to send 2 bytes at a time bc of a limitation of the i2c peripheral on the rp2350, discussed on the git repo
+	channel_config_set_transfer_data_size(&c, DMA_SIZE_16);	
 	channel_config_set_read_increment(&c,true);
 	channel_config_set_write_increment(&c,false);
 	channel_config_set_dreq(&c, i2c_get_dreq(p->i2c_i,true)); //synchronizing dma bus speed with i2c instance
@@ -264,7 +277,7 @@ bool ssd1306_dma_init(ssd1306_t *p){
 		&c,
 		&i2c_get_hw(p->i2c_i)->data_cmd,	//destination
 		p->full_buffer[p->active_buffer],	//source
-		1025,	//size of payload sent
+		dma_encode_transfer_count(1025),	//size of payload sent
 		false	//not starting transfer
 	);
 	return true;
@@ -277,8 +290,13 @@ void ssd1306_update_display_dma(ssd1306_t *p){
 	while(dma_channel_is_busy(p->dma_chan)){
 		tight_loop_contents();
 	}
-	uint8_t *payload_buffer = p->full_buffer[p->active_buffer];
-	p->active_buffer = 1 - p->active_buffer;
+	static uint16_t payload_buffer[1025];
+	payload_buffer[0] = 0x0040; 
+	for(int i = 0; i < 1024; i++){
+		payload_buffer[i + 1] = (uint16_t)p->display_buffer[i];
+	}
+	payload_buffer[1024] = (payload_buffer[1024] & 0x00FF) | (1 << 9);
+	p->active_buffer = !p->active_buffer;
 	p->display_buffer = &p->full_buffer[p->active_buffer][1];
 	//here i tell dma where to send the data, does this every update bc i2c bus could be busy and i the tar(get) could be changed by other functions
 	i2c_get_hw(p->i2c_i)->enable = 0;

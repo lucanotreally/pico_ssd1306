@@ -9,6 +9,26 @@
 #define OLED_HEIGHT 64
 #define OLED_BUF_SIZE 1024 //(128*64)/8 = 1024, divide by 8 bc it's in byte
 
+
+
+typedef struct {
+	i2c_inst_t *i2c_i; 	//i2c connection instance, pico stuff
+
+	// display buffer that points to full_buffer[1], done so i can send only 1 array when uploading screen each time, reducing serial comm load
+	uint8_t *display_buffer; 
+	uint8_t full_buffer[2][1025];
+	uint8_t width;	
+	uint8_t height; 	
+	uint8_t pages;		//stores pages of display (calculated on initialization)*
+	uint8_t address; 	//i2c address of display, 0x3C or 0x3D,based on solder bridge on the back of the display
+	int8_t dma_chan;
+	bool active_buffer;
+	bool external_vcc; 	// whether display uses external vcc 
+
+	bool is_scrolling; //keeps track if the display is scrolling, bc writing on the display ram while it is may cause glitching
+} ssd1306_t;
+
+
 typedef enum {
 
 	SET_DISP_OFF = 0xAE, //0xAE turns display off, low pwr sleep mode, 0xAF turns display on
@@ -42,19 +62,6 @@ typedef enum {
 
 
 
-typedef struct {
-	uint8_t width;	
-	uint8_t height; 	
-	uint8_t pages;		//stores pages of display (calculated on initialization)*
-	uint8_t address; 	//i2c address of display, 0x3C or 0x3D,based on solder bridge on the back of the display
-	i2c_inst_t *i2c_i; 	//i2c connection instance, pico stuff
-	bool external_vcc; 	// whether display uses external vcc 
-	int dma_chan;
-	uint8_t active_buffer;
-	uint8_t full_buffer[2][1025];	// whole buffer including 0x40 at the start
-	uint8_t *display_buffer;	// display buffer that points to full_buffer[1], done so i can send only 1 array when uploading screen each time, reducing serial comm load
-	uint8_t is_scrolling; //keeps track if the display is scrolling, bc writing on the display ram while it is may cause glitching
-} ssd1306_t;
 
 typedef struct{
 	uint8_t width;
@@ -90,5 +97,9 @@ void ssd1306_update_display_dma(ssd1306_t *p);
 
 void ssd1306_draw_sprite_slow(ssd1306_t *p, const sprite_t *s, int x, int y);
 void ssd1306_draw_sprite_fast(ssd1306_t *p, const sprite_t *s, int x, int y);
+
+void ssd1306_update_display_dma_test(ssd1306_t *p);
+
+void test_dma_16bit_hardware(ssd1306_t *p);
 //*display is divided in pages, blocks 8 pixel tall,128 wide
 #endif
