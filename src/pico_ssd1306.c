@@ -10,49 +10,53 @@
 //ssd1306 riconosce se byte mandato è di comando o un dato mandando due byte, primo di risconoscimento secondo di contenuto 0x00  = prossimo byte è comando, 0x40 = prossimo byte è dato
 
 
-inline static void raw_write(i2c_inst_t *i2c, uint8_t addr, const uint8_t *data, size_t len, char *name) {
-    switch(i2c_write_timeout_us(i2c, addr, data, len, false,100000)) {
-    case PICO_ERROR_GENERIC:
-        printf("[%s] addr not acknowledged!\n", name);
-        break;
-    case PICO_ERROR_TIMEOUT:
-        printf("[%s] timeout!\n", name);
-        break;
-    default:
-        //printf("[%s] wrote successfully %lu bytes!\n", name, len);
-        break;
-    }
+inline static void raw_write(ssd1306_t *p, const uint8_t *data, size_t len, char *name) {
+	if(p->protocol == SSD1306_PROTOCOL_I2C){
+		switch(i2c_write_timeout_us((i2c_inst_t *)p->hw_inst, p->hw_config.address, data, len, false,100000)) {
+			case PICO_ERROR_GENERIC:
+				printf("[%s] addr not acknowledged!\n", name);
+				break;
+			case PICO_ERROR_TIMEOUT:
+				printf("[%s] timeout!\n", name);
+				break;
+			default:
+				printf("[%s] wrote successfully %lu bytes!\n", name, len);
+				break;
+		}
+	}else{
+		gpio_put(p->hw_config.spi.cs, 0);
+
+		spi_write_blocking((spi_inst_t *)p->hw_inst,data,len);
+		gpio_put(p->hw_config.spi.cs,1);
+
+	}
 }
 
 inline static void ssd1306_send_cmd(ssd1306_t *p, uint8_t val){
-	uint8_t cmd_string[2] = {0x00,val};
-	raw_write(p->i2c_i,p->address,cmd_string,2,"ssd1306_send_cmd");
+	if(p->protocol == SSD1306_PROTOCOL_I2C){
+		uint8_t cmd_string[2] = {0x00,val};
+		raw_write(p,cmd_string,2,"ssd1306_send_cmd_i2c");
+	}else{
+		gpio_put(p->hw_config.spi.dc, 0); 
+		raw_write(p, &val, 1, "ssd1306_send_cmd_spi");
+
+	}
 }
 
 
-bool ssd1306_init(ssd1306_t *p,uint8_t width,uint8_t height,uint8_t address, i2c_inst_t *i2c_instance, bool x_flip, bool y_flip){ p->width=width; p->height=height;
-    	p->pages=height/8;
-	p->address=address;
-	p->i2c_i=i2c_instance;
-	p->active_buffer = 0;
-	p->full_buffer[0][0] = 0x40; //sets comm byte of final payload
-	p->full_buffer[1][0] = 0x40; 
-	p->display_buffer = &p->full_buffer[p->active_buffer][1];
-	
-
-
+static bool ssd1306_init_cmds(ssd1306_t *p, bool x_flip, bool y_flip){
 	uint8_t init_cmds[] = {
 		//some commands are 1 byte and some are 2 bytes long, requiring a value, they are arranged so the single byte ones are alone on the row, otherwise the data is specified next to them
 		//all param and value explanations in the header
 		SET_DISP_OFF,
-		SET_DISP_CLK_DIV, 0x80,
-		SET_MUX_RATIO, height-1,
+		SET_DISP_CLK_DIV, 0xF0,
+		SET_MUX_RATIO, p->height-1,
 		SET_DISP_OFFSET, 0x00,
 		SET_DISP_START_LINE,
 		SET_CHARGE_PUMP,p->external_vcc?0x10:0x14,
 		x_flip?FLIP_X_AXIS_ON:FLIP_X_AXIS_OFF,
 		y_flip?FLIP_Y_AXIS_ON:FLIP_Y_AXIS_OFF,
-		SET_COM_PIN_CFG, width>2*height?0x02:0x12,
+		SET_COM_PIN_CFG, p->width>2*p->height?0x02:0x12,
 		SET_CONTRAST, 0xFF,
 		SET_PRECHARGE, p->external_vcc?0x22:0xF1,
 		SET_VCOM_DESEL, 0x30,
@@ -64,10 +68,110 @@ bool ssd1306_init(ssd1306_t *p,uint8_t width,uint8_t height,uint8_t address, i2c
 	for(size_t i=0;i<sizeof(init_cmds);i++){
 		ssd1306_send_cmd(p,init_cmds[i]);
 	};
+	return true;
+}
 
+
+bool ssd1306_init_i2c(ssd1306_t *p, uint8_t width, uint8_t height, i2c_inst_t *i2c_instance, uint8_t address, bool x_flip, bool y_flip){
+	
+	p->hw_inst = (void*)i2c_instance;
+	p->protocol = SSD1306_PROTOCOL_I2C;
+	p->hw_config.address=address;
+
+	p->width = width;
+	p->height = height;
+	p->pages = height / 8;
+	p->active_buffer = 0;
+	p->full_buffer[0][0] = 0x40; //sets comm byte of final payload
+	p->full_buffer[1][0] = 0x40; 
+	p->display_buffer = &p->full_buffer[p->active_buffer][1];
+	return ssd1306_init_cmds(p, x_flip,y_flip);
+	
+}
+
+bool ssd1306_init_spi(ssd1306_t *p, uint8_t width, uint8_t height, spi_inst_t *spi_instance, uint8_t cs_pin, uint8_t dc_pin, uint8_t res_pin, bool x_flip, bool y_flip){
+	
+	p->width = width;
+	p->height = height;
+	p->pages = height / 8;
+
+	p->protocol = SSD1306_PROTOCOL_SPI;
+	p->hw_inst = (void *)spi_instance;
+	p->hw_config.spi.cs = cs_pin;
+	p->hw_config.spi.dc = dc_pin;
+	p->hw_config.spi.res = res_pin;
+
+	p->active_buffer = 0;
+	p->is_scrolling = 0;
+	p->display_buffer = &p->full_buffer[p->active_buffer][1];
+
+
+	gpio_init(cs_pin);
+	gpio_set_dir(cs_pin,GPIO_OUT);
+	gpio_put(cs_pin,1);
+
+	gpio_init(dc_pin);
+	gpio_set_dir(dc_pin,GPIO_OUT);
+	gpio_put(dc_pin,1);
+
+	if(res_pin != 255){
+		
+		gpio_init(res_pin);
+		gpio_set_dir(res_pin,GPIO_OUT);
+
+		gpio_put(res_pin, 1);
+		sleep_ms(1);
+		gpio_put(res_pin, 0);
+		sleep_ms(10);
+		gpio_put(res_pin, 1);
+
+	}
+
+
+	return ssd1306_init_cmds(p,x_flip,y_flip);
+}
+
+
+/*
+bool ssd1306_init(ssd1306_t *p,uint8_t width,uint8_t height,uint8_t address, i2c_inst_t *i2c_instance, bool x_flip, bool y_flip){ p->width=width; p->height=height;
+    	p->pages=height/8;
+	p->address=address;
+	p->i2c_i=i2c_instance;
+	p->active_buffer = 0;
+	p->full_buffer[0][0] = 0x40; //sets comm byte of final payload
+	p->full_buffer[1][0] = 0x40; 
+	p->display_buffer = &p->full_buffer[p->active_buffer][1];
+	
+
+	uint8_t init_cmds[] = {
+		//some commands are 1 byte and some are 2 bytes long, requiring a value, they are arranged so the single byte ones are alone on the row, otherwise the data is specified next to them
+		//all param and value explanations in the header
+		SET_DISP_OFF,
+		SET_DISP_CLK_DIV, 0xF0,
+		SET_MUX_RATIO, p->height-1,
+		SET_DISP_OFFSET, 0x00,
+		SET_DISP_START_LINE,
+		SET_CHARGE_PUMP,p->external_vcc?0x10:0x14,
+		x_flip?FLIP_X_AXIS_ON:FLIP_X_AXIS_OFF,
+		y_flip?FLIP_Y_AXIS_ON:FLIP_Y_AXIS_OFF,
+		SET_COM_PIN_CFG, p->width>2*p->height?0x02:0x12,
+		SET_CONTRAST, 0xFF,
+		SET_PRECHARGE, p->external_vcc?0x22:0xF1,
+		SET_VCOM_DESEL, 0x30,
+		SET_DISPLAY_NORMAL,
+		SET_INVERSION_NORMAL,
+		SET_DISP_ON,
+		SET_MEM_ADDR, 0x00
+	};
+	for(size_t i=0;i<sizeof(init_cmds);i++){
+		ssd1306_send_cmd(p,init_cmds[i]);
+	};
 	return true;
 
 }
+*/
+
+
 /* sus name and usage
 void ssd1306_deinit(ssd1306_t *p){
 	ssd1306_send_cmd(p,SET_DISP_OFF);
@@ -88,8 +192,16 @@ void ssd1306_poweron(ssd1306_t *p){
 void ssd1306_set_contrast(ssd1306_t *p,uint8_t contrast_percent){
 	if (contrast_percent>100) contrast_percent = 100;
 	uint8_t contrast_actual = (((uint32_t)contrast_percent * 255u)+50u)/100u;
-	ssd1306_send_cmd(p,SET_CONTRAST);
-	ssd1306_send_cmd(p,contrast_actual);
+	uint8_t payload[3] = {
+		0x00,
+		0x81,
+		contrast_actual
+	};
+	//ssd1306_send_cmd(p,0x2E);
+	while(dma_channel_is_busy(p->dma_chan)| i2c_get_hw((i2c_inst_t*)p->hw_inst)->status & I2C_IC_STATUS_MST_ACTIVITY_BITS){
+		tight_loop_contents();
+	}
+	raw_write(p,payload,3,"ssd1306_contrast_set");
 }
 
 void ssd1306_set_inversion_normal(ssd1306_t *p){
@@ -127,7 +239,7 @@ void ssd1306_horizontal_scroll_init(ssd1306_t *p, bool right, uint8_t start_page
 		[7] = 0x00,	//dummy byte
 		[8] = 0xFF,	//dummy
 	};
-	raw_write(p->i2c_i,p->address,scroll_seq,sizeof(scroll_seq),"scroll_init");
+	raw_write(p,scroll_seq,sizeof(scroll_seq),"scroll_init");
 }
 void ssd1306_scroll_start(ssd1306_t *p){
 	ssd1306_send_cmd(p, SET_SCROLL_ON);
@@ -149,20 +261,16 @@ void ssd1306_draw_pixel(ssd1306_t *p, int x, int y){
 	uint16_t index = ((y>>3)*p->width) + x;
 	p->display_buffer[index] |= (1<<(y&7));
 }
-/*
-void ssd1306_update_display(ssd1306_t *p){
-	
-	if (p->is_scrolling) ssd1306_scroll_stop(p);
-	raw_write(p->i2c_i,p->address,p->full_buffer[p->active_buffer],1025,"ssd1306_update");
-	if (p->is_scrolling) ssd1306_scroll_start(p);
-}
-*/
+
+
+
 void ssd1306_update_display(ssd1306_t *p) {
-    if (p->is_scrolling) ssd1306_scroll_stop(p);
-
-        raw_write(p->i2c_i, p->address, p->full_buffer[p->active_buffer], 1025, "ssd1306_update");
-
-    if (p->is_scrolling) ssd1306_scroll_start(p);
+	if(p->protocol == SSD1306_PROTOCOL_I2C){
+		raw_write(p , p->full_buffer[p->active_buffer], 1025, "ssd1306_update_i2c");
+	}else{
+		gpio_put(p->hw_config.spi.dc,1);
+		raw_write(p,p->display_buffer,1024,"ssd1306_update_spi");
+	}
 }
 
 
@@ -270,11 +378,11 @@ bool ssd1306_dma_init(ssd1306_t *p){
 	channel_config_set_transfer_data_size(&c, DMA_SIZE_16);	
 	channel_config_set_read_increment(&c,true);
 	channel_config_set_write_increment(&c,false);
-	channel_config_set_dreq(&c, i2c_get_dreq(p->i2c_i,true)); //synchronizing dma bus speed with i2c instance
+	channel_config_set_dreq(&c, i2c_get_dreq((i2c_inst_t*)p->hw_inst,true)); //synchronizing dma bus speed with i2c instance
 	dma_channel_configure(
 		p->dma_chan,
 		&c,
-		&i2c_get_hw(p->i2c_i)->data_cmd,	//destination
+		&i2c_get_hw((i2c_inst_t*)p->hw_inst)->data_cmd,	//destination
 		p->full_buffer[p->active_buffer],	//source
 		dma_encode_transfer_count(1025),	//size of payload sent
 		false	//not starting transfer
@@ -286,7 +394,7 @@ void ssd1306_update_display_dma(ssd1306_t *p){
 		ssd1306_update_display(p);
 		return;
 	}
-	while(dma_channel_is_busy(p->dma_chan) || i2c_get_hw(p->i2c_i)->status & I2C_IC_STATUS_MST_ACTIVITY_BITS){
+	while(dma_channel_is_busy(p->dma_chan) || i2c_get_hw((i2c_inst_t*)p->hw_inst)->status & I2C_IC_STATUS_MST_ACTIVITY_BITS){
 		tight_loop_contents();
 	}
 	static uint16_t payload_buffer[1025];
@@ -299,11 +407,82 @@ void ssd1306_update_display_dma(ssd1306_t *p){
 	p->active_buffer = !p->active_buffer;
 	p->display_buffer = &p->full_buffer[p->active_buffer][1];
 	//here i tell dma where to send the data, does this every update bc i2c bus could be busy and i the tar(get) could be changed by other functions
-	i2c_get_hw(p->i2c_i)->enable = 0;
-	i2c_get_hw(p->i2c_i)->tar = p->address;
-	i2c_get_hw(p->i2c_i)->enable = 1;
+	i2c_get_hw((i2c_inst_t*)p->hw_inst)->enable = 0;
+	i2c_get_hw((i2c_inst_t*)p->hw_inst)->tar = p->hw_config.address;
+	i2c_get_hw((i2c_inst_t*)p->hw_inst)->enable = 1;
 
 	dma_channel_set_read_addr(p->dma_chan,payload_buffer,false);
 	dma_channel_set_trans_count(p->dma_chan, 1025, true);
 
+}
+void ssd1306_draw_rect_fast(ssd1306_t *p, int x, int y, int w, int h) {
+    if(x >= 128 || y >= 64 || x + w <= 0 || y + h <= 0 || w <= 0 || h <= 0) return;
+
+    int x_start = (x < 0) ? 0 : x;
+    int x_end   = ((x + w) >= 128) ? 127 : x + w - 1;
+    int y_start = (y < 0) ? 0 : y;
+    int y_end   = ((y + h) >= 64) ? 63 : y + h - 1;
+
+    if (y >= 0 && y < 64) {
+        int page_top = y / 8;
+        uint8_t bit_top = 1 << (y % 8); // Crea un byte con 1 solo pixel acceso
+        for (int sx = x_start; sx <= x_end; sx++) {
+            p->display_buffer[sx + (page_top * 128)] |= bit_top;
+        }
+    }
+    
+    int y_bottom = y + h - 1;
+    if (y_bottom >= 0 && y_bottom < 64) {
+        int page_bottom = y_bottom / 8;
+        uint8_t bit_bottom = 1 << (y_bottom % 8);
+        for (int sx = x_start; sx <= x_end; sx++) {
+            p->display_buffer[sx + (page_bottom * 128)] |= bit_bottom;
+        }
+    }
+
+    int page_start = y_start / 8;
+    int page_end   = y_end / 8;
+
+    for (int page = page_start; page <= page_end; page++) {
+        uint8_t mask = 0xFF;
+        if (page == page_start) mask &= (0xFF << (y_start % 8));
+        if (page == page_end)   mask &= (0xFF >> (7 - (y_end % 8)));
+
+        if (x >= 0 && x < 128) {
+            p->display_buffer[x + (page * 128)] |= mask;
+        }
+        
+        int x_right = x + w - 1;
+        if (x_right >= 0 && x_right < 128) {
+            p->display_buffer[x_right + (page * 128)] |= mask;
+        }
+    }
+}
+void ssd1306_draw_fill_rect_fast(ssd1306_t *p, int x, int y, int w, int h) {
+    if(x >= 128 || y >= 64 || x + w <= 0 || y + h <= 0 || w <= 0 || h <= 0) return;
+
+    int x_start = (x < 0) ? 0 : x;
+    int x_end   = ((x + w) >= 128) ? 127 : x + w - 1;
+    int y_start = (y < 0) ? 0 : y;
+    int y_end   = ((y + h) >= 64) ? 63 : y + h - 1;
+
+    int page_start = y_start / 8;
+    int page_end   = y_end / 8;
+
+    for (int sx = x_start; sx <= x_end; sx++) {
+        for (int page = page_start; page <= page_end; page++) {
+            
+            uint8_t mask = 0xFF; // Partiamo con 8 pixel accesi (blocco solido)
+
+            if (page == page_start) {
+                mask &= (0xFF << (y_start % 8));
+            }
+            
+            if (page == page_end) {
+                mask &= (0xFF >> (7 - (y_end % 8)));
+            }
+
+            p->display_buffer[sx + (page * 128)] |= mask;
+        }
+    }
 }

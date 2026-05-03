@@ -164,7 +164,7 @@ int main(){
 	
 	
 	printf("creato display e assegnata istanza\ninizializzo schermo...\n");
-	ssd1306_init(&disp1,128,64,OLED_ADDR,i2c0,0,0);
+	ssd1306_init_i2c(&disp1,128,64,i2c0,OLED_ADDR,0,0);
 	sleep_ms(1000);
 	ssd1306_dma_init(&disp1);
 	ssd1306_set_inversion_inverted(&disp1);

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 #include "hardware/i2c.h"
-
+#include "hardware/spi.h"
 #define OLED_ADDR 0x3C //standard sd1306 i2c address
 #define OLED_WIDTH 128
 #define OLED_HEIGHT 64
@@ -12,21 +12,39 @@
 
 
 typedef struct {
-	i2c_inst_t *i2c_i; 	//i2c connection instance, pico stuff
+	//serial comm instance pointer, declared as void
+	//so we can assign a i2c or spi instance as needed
+	void *hw_inst;
 
-	// display buffer that points to full_buffer[1], done so i can send only 1 array when uploading screen each time, reducing serial comm load
+	// display buffer that points to full_buffer[active_buffer][1], done so i can send only 1 array when uploading screen each time, reducing serial comm load
 	uint8_t *display_buffer; 
 	uint8_t full_buffer[2][1025];
+	//union used here to allocate just the needed byte
+	//using i2c we dont need the other 3 params
+	union{
+		uint8_t address;
+		struct{
+			uint8_t dc;
+			uint8_t cs;
+			uint8_t res;
+		} spi;
+
+	} hw_config;
 	uint8_t width;	
 	uint8_t height; 	
 	uint8_t pages;		//stores pages of display (calculated on initialization)*
-	uint8_t address; 	//i2c address of display, 0x3C or 0x3D,based on solder bridge on the back of the display
 	int8_t dma_chan;
-	bool active_buffer;
-	bool external_vcc; 	// whether display uses external vcc 
 
-	bool is_scrolling; //keeps track if the display is scrolling, bc writing on the display ram while it is may cause glitching
+	bool active_buffer : 1;
+	bool external_vcc : 1; 	// whether display uses external vcc 
+	bool protocol : 1;	//0 = i2c, 1 = spi
+	bool is_scrolling : 1; 
 } ssd1306_t;
+
+typedef enum{
+	SSD1306_PROTOCOL_I2C = 0,
+	SSD1306_PROTOCOL_SPI = 1
+} ssd1306_protocol_t;
 
 
 typedef enum {
@@ -73,10 +91,53 @@ typedef struct{
 
 
 
+/**
+ * @brief Initializes the ssd1306 display using SPI, allows communication via the pico HAL and DMA.
+ *
+ *
+ *
+ *
+ * @param p Pointer to the display object to init.
+ * @param width Display width in pixel.
+ * @param height Display height in pixel.
+ * @param spi_instance Pointer to the pico spi instance (spi0 or spi1).
+ * @param cs_pin GPIO pin used for the chip select signal. 
+ * @param dc_pin GPIO pin used for the data/command signal. 
+ * @param res_pin GPIO pin used for the reset signal. Set to 255 if not used.
+ * @param x_flip If true, flips the display orientation horizontally.
+ * @param y_flip If true, flips the display orientation vertically.
+ *
+ * @return true if the init went smoothly false otherwise.
+ *
+ * @warning This init function contains 2 sleep calls, needed for the spi reset pin.
+ */
+bool ssd1306_init_spi(ssd1306_t *p, uint8_t width, uint8_t height, spi_inst_t *spi_instance, uint8_t cs_pin, uint8_t dc_pin, uint8_t res_pin, bool x_flip, bool y_flip);
+
+
+/**
+ * @brief Initializes the ssd1306 display using I2C, allows communication via the pico HAL and DMA.
+ *
+ *
+ *
+ *
+ * @param p Pointer to the display object to init.
+ * @param width Display width in pixel.
+ * @param height Display height in pixel.
+ * @param i2c_instance Pointer to the pico i2c instance (i2c0 or i2c1).
+ * @param address I2C display address.
+ * @param x_flip If true, flips the display orientation horizontally.
+ * @param y_flip If true, flips the display orientation vertically.
+ *
+ * @return true if the init went smoothly false otherwise.
+ *
+ */
+bool ssd1306_init_i2c(ssd1306_t *p, uint8_t width, uint8_t height, i2c_inst_t *i2c_instance, uint8_t address, bool x_flip, bool y_flip);
+
+
 bool ssd1306_init(ssd1306_t *p,uint8_t width, uint8_t height, uint8_t address, i2c_inst_t *instance,bool x_flip,bool y_flip);
 void ssd1306_set_inversion_normal(ssd1306_t *p);
 void ssd1306_set_inversion_inverted(ssd1306_t *p);
-
+void ssd1306_set_contrast(ssd1306_t *p, uint8_t percentage);
 void scroll_trial(ssd1306_t *p);
 void ssd1306_stop_scroll(ssd1306_t *p);
 
@@ -101,5 +162,7 @@ void ssd1306_draw_sprite_fast(ssd1306_t *p, const sprite_t *s, int x, int y);
 void ssd1306_update_display_dma_test(ssd1306_t *p);
 
 void test_dma_16bit_hardware(ssd1306_t *p);
+void ssd1306_draw_rect_fast(ssd1306_t *p, int x, int y, int w, int h);
+void ssd1306_draw_fill_rect_fast(ssd1306_t *p, int x, int y, int w, int h);
 //*display is divided in pages, blocks 8 pixel tall,128 wide
 #endif

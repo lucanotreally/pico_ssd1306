@@ -158,12 +158,11 @@ int main(){
 	printf("inizializzato i2c\ncreo oggetto display...\n");
 	
 	ssd1306_t disp1;
-	disp1.i2c_i = i2c0;
 	disp1.external_vcc = 0;
 	
 	
 	printf("creato display e assegnata istanza\ninizializzo schermo...\n");
-	ssd1306_init(&disp1,128,64,OLED_ADDR,i2c0,0,0);
+	ssd1306_init_i2c(&disp1,128,64,i2c0,OLED_ADDR,0,0);
 	ssd1306_dma_init(&disp1);
 
 	ssd1306_set_inversion_inverted(&disp1);

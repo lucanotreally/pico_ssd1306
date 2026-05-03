@@ -8,41 +8,53 @@ project(pico_ssd1306 C CXX ASM)
 pico_sdk_init()
 add_library(ssd1306_lib
     src/pico_ssd1306.c
-    examples/sprites/sprites.c
+    assets/sprites/sprites.c
 )
 
 target_include_directories(ssd1306_lib PUBLIC
     ${PROJECT_SOURCE_DIR}/src
-    ${PROJECT_SOURCE_DIR}/examples/sprites
+    ${PROJECT_SOURCE_DIR}/assets
 )
 
 target_link_libraries(ssd1306_lib PUBLIC
     pico_stdlib
     hardware_i2c
+    hardware_spi
     hardware_dma
+    hardware_adc
 )
 
-file(GLOB EXAMPLE_FILES examples/*.c)
+file(GLOB EXAMPLE_DIRS "examples/*")
 
-foreach(example ${EXAMPLE_FILES})
-    get_filename_component(example_name ${example} NAME_WE)
+foreach(dir ${EXAMPLE_DIRS})
+    if(IS_DIRECTORY ${dir})
+        
+        get_filename_component(example_name ${dir} NAME)
 
-    add_executable(${example_name} ${example})
+        file(GLOB example_srcs "${dir}/*.c")
 
-    target_link_libraries(${example_name}
-        pico_stdlib
-        hardware_i2c
-        hardware_dma
-        ssd1306_lib
-    )
+        if(example_srcs)
+            add_executable(${example_name} ${example_srcs})
 
-    target_include_directories(${example_name} PRIVATE
-        ${PROJECT_SOURCE_DIR}/src
-        ${PROJECT_SOURCE_DIR}/examples/sprites
-    )
+            target_link_libraries(${example_name}
+                pico_stdlib
+                hardware_i2c
+                hardware_spi
+                hardware_dma
+                hardware_adc
+                ssd1306_lib
+            )
 
-    pico_enable_stdio_usb(${example_name} 1)
-    pico_enable_stdio_uart(${example_name} 0)
+            target_include_directories(${example_name} PRIVATE
+                ${PROJECT_SOURCE_DIR}/src
+                ${PROJECT_SOURCE_DIR}/assets
+            )
 
-    pico_add_extra_outputs(${example_name})
+            pico_enable_stdio_usb(${example_name} 1)
+            pico_enable_stdio_uart(${example_name} 0)
+
+            pico_add_extra_outputs(${example_name})
+        endif()
+        
+    endif()
 endforeach()
