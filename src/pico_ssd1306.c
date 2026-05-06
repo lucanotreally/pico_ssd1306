@@ -20,7 +20,7 @@ inline static void raw_write(ssd1306_t *p, const uint8_t *data, size_t len, char
 				printf("[%s] timeout!\n", name);
 				break;
 			default:
-				printf("[%s] wrote successfully %lu bytes!\n", name, len);
+//				printf("[%s] wrote successfully %lu bytes!\n", name, len);
 				break;
 		}
 	}else{
